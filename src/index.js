@@ -2,9 +2,12 @@ const express = require('express');
 const StreamArray = require('stream-json/streamers/StreamArray');
 const Batch = require('stream-json/utils/Batch');
 const {chain} = require('stream-chain');
+const helmet = require('helmet');
 
 const app = express();
 const port = 3000;
+
+app.use(helmet());
 
 app.post('/', (req, res) => {
 
