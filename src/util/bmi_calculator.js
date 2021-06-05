@@ -22,6 +22,7 @@ const processBatch = ({data, isStart}) => {
         } else if (value.BMI > 24.9 && value.BMI <= 29.9) {
             value.BMIRange = 'Overweight';
             value.HealthRisk = 'Enhanced Risk';
+            overWeightCount++;
         } else if (value.BMI > 29.9 && value.BMI <= 34.9) {
             value.BMIRange = 'Moderately Obese';
             value.HealthRisk = 'Medium Risk';
@@ -31,9 +32,6 @@ const processBatch = ({data, isStart}) => {
         } else if (value.BMI > 39.9) {
             value.BMIRange = 'Very Severely Obese';
             value.HealthRisk = 'Very High Risk';
-        }
-        if (value.BMIRange === 'Overweight') {
-            overWeightCount++;
         }
         contentStr = contentStr + (isStart ? '' : ',') + JSON.stringify(value);
         isStart = false;

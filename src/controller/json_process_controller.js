@@ -3,7 +3,7 @@ const StreamArray = require('stream-json/streamers/StreamArray');
 const Batch = require('stream-json/utils/Batch');
 const {chain} = require('stream-chain');
 const vblaze = require('vblaze');
-const {processBatch} = require('../util/bmi_caluculator')
+const {processBatch} = require('../util/bmi_calculator')
 
 let nanoJobPool;
 

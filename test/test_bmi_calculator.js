@@ -1,5 +1,5 @@
 const expect = require('chai').expect;
-const {processBatch} = require('../src/util/bmi_caluculator')
+const {processBatch} = require('../src/util/bmi_calculator')
 
 describe('Test cases for utility methods', () => {
     it('Check if we get correct records and overweight count', () => {
