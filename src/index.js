@@ -3,9 +3,17 @@ const StreamArray = require('stream-json/streamers/StreamArray');
 const Batch = require('stream-json/utils/Batch');
 const {chain} = require('stream-chain');
 const helmet = require('helmet');
+const vblaze = require('vblaze');
 
 const app = express();
 const port = 3000;
+let nanoJobPool;
+
+(async () => {
+    const {nanoJob} = await vblaze(4);
+    nanoJobPool = nanoJob;
+})()
+
 
 app.use(helmet());
 
@@ -17,70 +25,83 @@ app.post('/', (req, res) => {
     }
 
     let isStart = true;
-    let overWeightCount = 0;
+    let promises = [];
     const jsonStream = chain([
         req,
         StreamArray.withParser(),
-        new Batch({batchSize: 1000})
+        new Batch({batchSize: 10000})
     ]);
 
-    jsonStream.on('data', data => {
-        let str = '';
-        data.forEach(obj => {
-            let value = obj.value
-            if (value.HeightCm == null || value.WeightKg == null) {
-                return;
-            }
-            let heightInMeters = value.HeightCm / 100;
-            value.BMI = (value.WeightKg / (heightInMeters * heightInMeters)).toFixed(1);
-            Object.assign(value, getBMICategory(value.BMI));
-            if (value.BMIRange === 'Overweight') {
-                overWeightCount++;
-            }
-            str = str + (isStart ? '' : ',') + JSON.stringify(value);
+    jsonStream.on('data', async (data) => {
+        promises.push(processBatchAndWriteToResponse({data, isStart, res}));
+        if (isStart) {
             isStart = false;
-        });
-        res.write(str);
+        }
     });
 
     jsonStream.on('end', () => {
-        res.write(`], "overWeightCount": ${overWeightCount} }`);
-        res.end();
+        Promise.all(promises).then((values) => {
+            let overWeightCount = 0;
+            values.forEach(value => {
+                overWeightCount = overWeightCount + value;
+            })
+            console.log(overWeightCount);
+            res.write(`], "overWeightCount": ${overWeightCount} }`);
+            res.end();
+        });
     });
 });
 
-const getBMICategory = (value) => {
-    if (value <= 18.4) {
-        return {
-            BMIRange: 'Under Weight',
-            HealthRisk: 'Malnutrition Risk',
-        };
-    } else if (value > 18.4 && value <= 24.9) {
-        return {
-            BMIRange: 'Normal Weight',
-            HealthRisk: 'Low Risk',
-        };
-    } else if (value > 24.9 && value <= 29.9) {
-        return {
-            BMIRange: 'Overweight',
-            HealthRisk: 'Enhanced Risk',
-        };
-    } else if (value > 29.9 && value <= 34.9) {
-        return {
-            BMIRange: 'Moderately Obese',
-            HealthRisk: 'Medium Risk',
-        };
-    } else if (value > 34.9 && value <= 39.9) {
-        return {
-            BMIRange: 'Severely Obese',
-            HealthRisk: 'High Risk',
-        };
-    } else if (value > 39.9) {
-        return {
-            BMIRange: 'Very Severely Obese',
-            HealthRisk: 'Very High Risk',
-        };
-    }
+const processBatchAndWriteToResponse = async ({data, isStart, res}) => {
+    let {contentStr, overWeightCount} = await nanoJobPool(processBatch, {data, isStart});
+    res.write(contentStr);
+    return overWeightCount;
+}
+
+const processBatch = ({data, isStart}) => {
+    let contentStr = '';
+    let overWeightCount = 0;
+    data.forEach(obj => {
+        let value = obj.value;
+        if (!(typeof value.HeightCm == "number" && isFinite(value.HeightCm))) {
+            console.error('Please verify json, height should be numeric', value);
+            return;
+        }
+        if (!(typeof value.WeightKg == "number" && isFinite(value.WeightKg))) {
+            console.error('Please verify json, weight should be numeric', value);
+            return;
+        }
+        let heightInMeters = value.HeightCm / 100;
+        value.BMI = (value.WeightKg / (heightInMeters * heightInMeters)).toFixed(1);
+        if (value.BMI <= 18.4) {
+            value.BMIRange = 'Under Weight';
+            value.HealthRisk = 'Malnutrition Risk';
+        } else if (value.BMI > 18.4 && value.BMI <= 24.9) {
+            value.BMIRange = 'Normal Weight';
+            value.HealthRisk = 'Low Risk';
+        } else if (value.BMI > 24.9 && value.BMI <= 29.9) {
+            value.BMIRange = 'Overweight';
+            value.HealthRisk = 'Enhanced Risk';
+        } else if (value.BMI > 29.9 && value.BMI <= 34.9) {
+            value.BMIRange = 'Moderately Obese';
+            value.HealthRisk = 'Medium Risk';
+        } else if (value.BMI > 34.9 && value.BMI <= 39.9) {
+            value.BMIRange = 'Severely Obese';
+            value.HealthRisk = 'High Risk';
+        } else if (value.BMI > 39.9) {
+            value.BMIRange = 'Very Severely Obese';
+            value.HealthRisk = 'Very High Risk';
+        }
+        if (value.BMIRange === 'Overweight') {
+            overWeightCount++;
+        }
+        contentStr = contentStr + (isStart ? '' : ',') + JSON.stringify(value);
+        isStart = false;
+    });
+    return {
+        contentStr,
+        overWeightCount,
+    };
 }
 
 app.listen(port, () => {
